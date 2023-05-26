@@ -1,0 +1,88 @@
+---
+  - name: Deploy minecraft server
+    hosts: all
+    become: yes
+    gather_facts: no
+    tasks:
+      - name: Update server
+        block:
+        - name: Update apt-get repo and cache
+          apt: 
+            update_cache: yes
+            force_apt_get: yes
+            cache_valid_time: 3600
+          tags: install
+
+        - name: Upgrade all apt packages
+          apt:
+            upgrade: dist
+            force_apt_get: yes
+          tags: install
+
+      - name: Install Oracle
+        apt:
+          name: openjdk-17-jre-headless
+        tags: install
+
+      # - name: Install Screen
+      #   apt:
+      #     name: screen
+
+      - name: Open port 25565
+        ufw:
+          port: '25565'
+          rule: allow
+        tags: install
+
+      - name: Create server folder
+        file:
+          state: directory
+          path: /server/
+        tags: install
+        
+      - name: Download minecraft 1.18.2 # mcversions.net
+        get_url:
+          dest: /server/minecraft_server_1.18.2.jar
+          url: https://launcher.mojang.com/v1/objects/c8f83c5655308435b3dcf03c06d9fe8740a77469/server.jar
+
+      - name: Copy eula.txt
+        copy:
+          src: ./eula.txt 
+          dest: /server/eula.txt
+
+      - name: Copy server.properties
+        copy:
+          src: ./server.properties
+          dest: /server/server.properties
+          force: no
+
+      - name: Stdin file
+        block:
+        - name: Remove old stdin file
+          file:
+            state: absent
+            path: /server/console.in
+          tags: run
+
+        - name: Remove old stdout file
+          file:
+            state: absent
+            path: /server/console.out
+          tags: run
+
+        - name: Create stdin file
+          file:
+            state: touch
+            path: /server/console.in
+          tags: run
+        
+      - name: Start server detached
+        shell:
+          chdir: /server/
+          cmd: 'nohup tail -f /server/console.in | nohup java -Xms1024M -Xmx{{ram}}G -jar /server/minecraft_server_1.18.2.jar nogui >> /server/console.out &'
+        register: output
+        tags: run
+
+      - name: DEBUG Print output
+        debug:
+          var: output
